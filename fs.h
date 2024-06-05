@@ -16,6 +16,13 @@
 #define WRITE 0x02
 #define EXECUTE 0x01
 
+// DIR_SIZE calculates the number of directory entries that can fit into a single disk block.
+// It does this by dividing the block size (BLOCK_SIZE) by the size of one directory entry (sizeof(dir_entry)).
+#define DIR_SIZE BLOCK_SIZE/sizeof(dir_entry)
+// FAT_ENTRIES calculates the number of FAT (File Allocation Table) entries that can fit into a single disk block.
+// Since each FAT entry is 2 bytes, it divides the block size (BLOCK_SIZE) by 2 to determine the total number of FAT entries per block.
+#define FAT_ENTRIES BLOCK_SIZE/2
+
 struct dir_entry {
     char file_name[56]; // name of the file / sub-directory
     uint32_t size; // size of the file in bytes
@@ -24,11 +31,23 @@ struct dir_entry {
     uint8_t access_rights; // read (0x04), write (0x02), execute (0x01)
 };
 
+struct cwd_struct {
+    dir_entry enteries [DIR_SIZE];
+    dir_entry informatioin; 
+    int block; 
+}; 
+
+
 class FS {
 private:
     Disk disk;
     // size of a FAT entry is 2 bytes
     int16_t fat[BLOCK_SIZE/2];
+
+    cwd_struct cwd;
+
+    // Helper function to find the directory entry for a given file
+    dir_entry* find_dir_entry(const std::string& filename, dir_entry* root_dir);
 
 public:
     FS();
@@ -38,6 +57,11 @@ public:
     // create <filepath> creates a new file on the disk, the data content is
     // written on the following rows (ended with an empty row)
     int create(std::string filepath);
+    /*######## help funktion for create ##############*/
+    void file_parts(std::string filepath, std::string *filename, std::string *directury_path);
+    dir_entry* find_directury_entry(std::string filname);
+    int fin_a_empty_block(); 
+
     // cat <filepath> reads the content of a file and prints it on the screen
     int cat(std::string filepath);
     // ls lists the content in the current directory (files and sub-directories)
