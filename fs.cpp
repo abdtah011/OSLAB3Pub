@@ -93,14 +93,14 @@ FS::create(std::string filepath)
 
     //Find a empty block 
 
-    int block_number = fin_a_empty_block();
-    if (block_number == -1){
+    // int block_number = fin_a_empty_block();
+    // if (block_number == -1){
         
-    }
+    // }
     
     return 0;
 }
-
+//KASPER
 // cat <filepath> reads the content of a file and prints it on the screen
 int
 FS::cat(std::string filepath)
@@ -130,6 +130,27 @@ FS::cat(std::string filepath)
         std::cerr << "Error" << filepath << " is not a file \n";
         return -1;
     }
+
+    //Read and print the file's data
+    uint16_t blk = file_entry->first_blk;
+    uint32_t size = file_entry->size;
+    uint8_t buffer[BLOCK_SIZE];
+
+
+    while (blk != FAT_EOF) { //////////////////////////////////////////////////////////////////////////////////////// check type uint16
+        if (disk.read(blk,buffer) != 0) {
+            std::cerr << "Error : Failed to read block " << blk << "\n";
+            return -1;
+        }
+
+        //calculate how much to print from this block
+        uint32_t to_print = std::min(size, static_cast<uint32_t>(BLOCK_SIZE));
+        std::cout.write(reinterpret_cast<char*>(buffer), to_print);
+        size -= to_print;
+        blk = fat[blk];
+    }
+
+    std::cout << std::endl;
     return 0;
 }
 
