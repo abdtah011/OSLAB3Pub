@@ -154,11 +154,39 @@ FS::cat(std::string filepath)
     return 0;
 }
 
+
+//KASPER
 // ls lists the content in the currect directory (files and sub-directories)
 int
 FS::ls()
 {
     std::cout << "FS::ls()\n";
+
+     //read the root directory block
+    uint8_t root_block[BLOCK_SIZE];
+    if(disk.read(ROOT_BLOCK, root_block) != 0){
+        std::cerr <<"Error: Failed to read root directory block\n";
+        return -1;
+    }
+
+    //converts the pointer type from uint8_t* to dir_entry*.
+    dir_entry* root_dir = reinterpret_cast<dir_entry*>(root_block);
+
+    std::cout << "name:\n";
+    for (int i = 0; i < BLOCK_SIZE / sizeof(dir_entry); i++){
+        dir_entry& entry = root_dir[i];
+        if (entry.file_name[0] != '\0') { // check if entry is valid (not empty)
+            std::cout << entry.file_name << "\n";
+        }
+    }
+
+    std::cout << "size\n";
+    for (int i = 0; i < BLOCK_SIZE / sizeof(dir_entry); i++){
+        dir_entry& entry = root_dir[i];
+        if (entry.file_name[0] != '\0') { // check if entry is valid (not empty)
+            std::cout << entry.size << "\n";
+        }
+    }    
     return 0;
 }
 
@@ -295,7 +323,7 @@ FS::fin_a_empty_block(){
 
 ////// Help function for cat
 //Heleper function to find the directory entry for a given file 
-dir_entry* find_dir_entry(const std::string& filename, dir_entry* root_dir){
+dir_entry* FS::find_dir_entry(const std::string& filename, dir_entry* root_dir){
     for (int i = 0; i < BLOCK_SIZE / sizeof(dir_entry); ++i){
         if(std::strcmp(root_dir[i].file_name, filename.c_str()) == 0 ) {
             return &root_dir[i];
