@@ -190,12 +190,119 @@ FS::ls()
     return 0;
 }
 
+
+//KASPER
 // cp <sourcepath> <destpath> makes an exact copy of the file
 // <sourcepath> to a new file <destpath>
 int
 FS::cp(std::string sourcepath, std::string destpath)
 {
     std::cout << "FS::cp(" << sourcepath << "," << destpath << ")\n";
+
+    // Read the root directory block
+    uint8_t root_block[BLOCK_SIZE];
+    if (disk.read(ROOT_BLOCK, root_block) != 0){
+        std::cerr << "Error: Failed to read root directory block \n";
+        return -1;
+    }
+
+    //converts the pointer type from uint8_t* to dir_entry*.
+    dir_entry* root_dir = reinterpret_cast<dir_entry*>(root_block);
+
+    //Find the source file
+    dir_entry* src_entry = find_dir_entry(sourcepath, root_dir);
+    if(!src_entry) {
+        std::cerr << "Error: Source file not found \n";
+        return -1;
+    }
+
+    //Ensure the source is a file
+    if(src_entry->type != TYPE_FILE){
+        std::cerr << "Error: " << sourcepath << " is not a file \n";
+        return -1;
+    }
+
+    // Check if the destinantion alreadt exists!
+    if(find_dir_entry(destpath, root_dir)) {
+        std::cerr << "Error Destinantion file already exists \n";
+        return -1;  
+    }
+
+    uint16_t blk = src_entry->first_blk;
+    uint16_t prev_blk = FAT_FREE;   //As we copy each block from the source to the destination, prev_blk will be updated to link the blocks together in the FAT.
+    uint16_t first_blk_dest = FAT_FREE;
+    uint32_t size = src_entry->size;
+    uint8_t buffer[BLOCK_SIZE];
+    while(blk != FAT_EOF) {
+        //read the source Block
+        if(disk.read(blk, buffer) != 0) {
+            std::cerr << "Error: Failed to read block " << blk << " from disk \n";
+            return -1;
+        }
+
+        //Find a free block for the destinantion file
+        uint16_t dest_blk = FAT_FREE;
+        for(uint16_t i = 0; i < BLOCK_SIZE / 2; i++) {
+            if(fat[i] == FAT_FREE) {
+                dest_blk = i;
+                break;
+            }
+        }
+
+        if(dest_blk == FAT_FREE) {
+            std::cerr << "Error: No free blocks available on disk \n";
+            return -1;
+        }      
+
+
+        //Write the block to the destinantion
+        if(disk.write(dest_blk, buffer) != 0) {
+            std::cerr << "Error: Failed to write to block " << dest_blk << " \n";
+            return -1;
+        }
+
+        //update the FAT
+        if (prev_blk != FAT_FREE) {
+            fat[prev_blk] = dest_blk;
+        }
+        else {
+            first_blk_dest = dest_blk;
+        }
+        prev_blk = dest_blk;
+        //morve to the next block in the source file
+        blk = fat[blk];
+    }
+
+    //mark the end of the dest file in the FAT
+    if (prev_blk != FAT_FREE){
+        fat[prev_blk] = FAT_EOF;
+    }
+
+    //create a new directory entry for the destinantion file
+    for (int i = 0; i < BLOCK_SIZE / sizeof(dir_entry); ++i){
+        if (root_dir[i].file_name[0] == '\0'){
+            std::strncpy(root_dir[i].file_name, destpath.c_str(), sizeof(root_dir[i].file_name) - 1);
+            root_dir[i].file_name[sizeof(root_dir[i].file_name) - 1] = '\0';
+            root_dir[i].size = src_entry->size;
+            root_dir[i].first_blk = first_blk_dest;
+            root_dir[i].type = TYPE_FILE;
+            root_dir[i].access_rights = src_entry->access_rights;
+            break;
+        }
+
+    }
+
+    // Write the updated FAT and root directory back to disk
+    if (disk.write(FAT_BLOCK, reinterpret_cast<uint8_t*>(fat)) != 0) {
+        std::cerr << "Error: Failed to write FAT to disk\n";
+        return -1;
+    }
+
+    if (disk.write(ROOT_BLOCK, reinterpret_cast<uint8_t*>(root_dir)) != 0) {
+        std::cerr << "Error: Failed to write root directory block to disk\n";
+        return -1;
+    }
+
     return 0;
 }
 
@@ -321,7 +428,7 @@ FS::fin_a_empty_block(){
 }
 
 
-////// Help function for cat
+////// Help function for cat and ls and cp
 //Heleper function to find the directory entry for a given file 
 dir_entry* FS::find_dir_entry(const std::string& filename, dir_entry* root_dir){
     for (int i = 0; i < BLOCK_SIZE / sizeof(dir_entry); ++i){
